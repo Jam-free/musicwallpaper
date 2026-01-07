@@ -23,5 +23,12 @@ dist-ssr
 *.sln
 *.sw?
 
+# Large image files
+*.jpg
+*.jpeg
+*.png
+!src/**/*.png
+!src/**/*.jpg
+
 
 
