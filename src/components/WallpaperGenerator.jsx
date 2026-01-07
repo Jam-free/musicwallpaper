@@ -158,7 +158,7 @@ function WallpaperGenerator({ songData, onReset }) {
     }
 
     bgImg.onerror = () => {
-      alert('Failed to load image for download')
+      alert('加载图片失败，无法下载')
     }
 
     bgImg.src = songData.albumCover
@@ -267,7 +267,7 @@ function WallpaperGenerator({ songData, onReset }) {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            New Search
+            重新搜索
           </motion.button>
           <motion.button
             className="control-button primary"
@@ -276,7 +276,7 @@ function WallpaperGenerator({ songData, onReset }) {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            Download
+            下载壁纸
           </motion.button>
         </motion.div>
       </motion.div>

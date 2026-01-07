@@ -30,7 +30,7 @@ function SearchInput({ onSearch, isLoading }) {
           onChange={(e) => setValue(e.target.value)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          placeholder="Search for a song..."
+          placeholder="搜索歌曲名称..."
           className="search-input"
           disabled={isLoading}
           autoFocus

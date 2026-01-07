@@ -32,15 +32,15 @@ function App() {
             const bHasHD = b.artworkUrl100 && b.artworkUrl100.includes('100x100')
             if (aHasHD && !bHasHD) return -1
             if (!aHasHD && bHasHD) return 1
-            
+
             // 优先选择较新的（releaseDate 较新）
             if (a.releaseDate && b.releaseDate) {
               return new Date(b.releaseDate) - new Date(a.releaseDate)
             }
-            
+
             return 0
           })
-        
+
         const track = sortedResults[0] || data.results[0]
         setSongData({
           songName: track.trackName,
@@ -49,12 +49,12 @@ function App() {
           collectionName: track.collectionName
         })
       } else {
-        alert('No results found. Please try another song.')
+        alert('未找到结果，请尝试其他歌曲。')
         setShowInput(true)
       }
     } catch (error) {
       console.error('Error fetching song:', error)
-      alert('Failed to fetch song. Please try again.')
+      alert('获取歌曲失败，请重试。')
       setShowInput(true)
     } finally {
       setIsLoading(false)
@@ -68,46 +68,28 @@ function App() {
 
   return (
     <div className="app">
-      {/* Left side decorations */}
-      {showInput && !songData && (
-        <>
-          <div className="decoration-left">
-            <div className="deco-circle"></div>
-            <div className="deco-circle"></div>
-            <div className="deco-circle"></div>
-          </div>
-          <div className="deco-lines"></div>
-          <div className="deco-tag">✦ Wallpaper Generator</div>
-          <div className="deco-tag">✦ Music Art</div>
-          <div className="deco-tag">✦ Creative</div>
+      {/* Geometric shapes background */}
+      <div className="geometric-bg">
+        <div className="geo-shape geo-1"></div>
+        <div className="geo-shape geo-2"></div>
+        <div className="geo-shape geo-3"></div>
+        <div className="geo-shape geo-4"></div>
+        <div className="geo-shape geo-5"></div>
+        <div className="geo-shape geo-6"></div>
+        <div className="geo-grid"></div>
+        <div className="geo-dots"></div>
+      </div>
 
-          {/* Additional decorative dots */}
-          <div className="deco-dots">
-            <div className="dot"></div>
-            <div className="dot"></div>
-            <div className="dot"></div>
-          </div>
-
-          {/* Music note icons */}
-          <div className="deco-music">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 18V5l12-2v13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="6" cy="18" r="3" stroke="currentColor" strokeWidth="1.5"/>
-              <circle cx="18" cy="16" r="3" stroke="currentColor" strokeWidth="1.5"/>
-            </svg>
-          </div>
-        </>
-      )}
-
+      {/* Content positioned on the left side */}
       <AnimatePresence mode="wait">
         {showInput && !songData && (
           <motion.div
             key="input"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 30 }}
             transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-            className="input-container"
+            className="content-area"
           >
             <motion.div
               className="hero-section"
@@ -115,8 +97,11 @@ function App() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
             >
-              <h1 className="hero-title">Music Wallpaper</h1>
-              <p className="hero-subtitle">Create beautiful wallpapers from your favorite album art</p>
+              <h1 className="hero-title">
+                <span className="title-line">Music</span>
+                <span className="title-line title-accent">Wallpaper</span>
+              </h1>
+              <p className="hero-subtitle">将你最喜欢的专辑封面转换为精美的壁纸</p>
             </motion.div>
             <SearchInput onSearch={handleSearch} isLoading={isLoading} />
           </motion.div>
