@@ -2,52 +2,153 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import SearchInput from './components/SearchInput'
 import WallpaperGenerator from './components/WallpaperGenerator'
+import AlbumCoverSelector from './components/AlbumCoverSelector'
+import { getBestAlbumCover, rankAlbumCovers, getRecommendedArtist, getSongTranslations } from './utils/albumRanker'
 import './App.css'
 
 function App() {
   const [songData, setSongData] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showInput, setShowInput] = useState(true)
+  const [coverCandidates, setCoverCandidates] = useState(null)
 
   const handleSearch = async (songName) => {
     if (!songName.trim()) return
 
     setIsLoading(true)
     setShowInput(false)
+    setCoverCandidates(null)
 
     try {
-      // 获取更多结果以便筛选
-      const response = await fetch(
-        `https://itunes.apple.com/search?term=${encodeURIComponent(songName)}&media=music&limit=20`
-      )
-      const data = await response.json()
-
-      if (data.results && data.results.length > 0) {
-        // 优先选择：1. 有高清封面的 2. 较新的专辑 3. 主流艺术家
-        const sortedResults = data.results
-          .filter(track => track.artworkUrl100) // 必须有封面
-          .sort((a, b) => {
-            // 优先选择有高清封面的（artworkUrl100 存在且可替换为 1000x1000）
-            const aHasHD = a.artworkUrl100 && a.artworkUrl100.includes('100x100')
-            const bHasHD = b.artworkUrl100 && b.artworkUrl100.includes('100x100')
-            if (aHasHD && !bHasHD) return -1
-            if (!aHasHD && bHasHD) return 1
-
-            // 优先选择较新的（releaseDate 较新）
-            if (a.releaseDate && b.releaseDate) {
-              return new Date(b.releaseDate) - new Date(a.releaseDate)
-            }
-
-            return 0
-          })
-
-        const track = sortedResults[0] || data.results[0]
-        setSongData({
-          songName: track.trackName,
-          artistName: track.artistName,
-          albumCover: track.artworkUrl100?.replace('100x100', '1000x1000') || track.artworkUrl100,
-          collectionName: track.collectionName
+      // 优化搜索策略：尝试多种搜索方式和地区，提高命中率
+      const searchTerms = new Set()
+      const normalizedSongName = songName.trim().toLowerCase()
+      
+      // 1. 原始搜索词
+      searchTerms.add(songName.trim())
+      
+      // 2. 如果搜索的是中文，也添加英文翻译进行搜索
+      const isChineseSearch = /[\u4e00-\u9fa5]/.test(songName)
+      if (isChineseSearch) {
+        const translations = getSongTranslations(songName)
+        translations.forEach(translation => {
+          searchTerms.add(translation)
+          // 也尝试搜索 "艺术家 + 英文翻译"
+          const matchedArtist = getRecommendedArtist(songName)
+          if (matchedArtist) {
+            searchTerms.add(`${matchedArtist} ${translation}`)
+            searchTerms.add(`${translation} ${matchedArtist}`)
+          }
         })
+      }
+      
+      // 3. 检查是否有硬编码的艺术家匹配规则
+      const matchedArtist = getRecommendedArtist(songName)
+      
+      if (matchedArtist) {
+        // 如果找到匹配规则，直接搜索 "艺术家名 + 歌曲名"
+        searchTerms.add(`${matchedArtist} ${songName.trim()}`)
+        searchTerms.add(`${songName.trim()} ${matchedArtist}`)
+      }
+      
+      // 4. 只搜索第一个词（对于"Peaches"这种单字歌曲）
+      const firstWord = songName.trim().split(/\s+/)[0]
+      if (firstWord && firstWord !== songName.trim()) {
+        searchTerms.add(firstWord)
+      }
+      
+      // 4. 增加地区支持，特别是香港区 (hk) 对华语歌曲支持极好
+      const countries = ['us', 'hk', 'tw'] // 增加台湾区
+      const searchAttributes = ['songTerm', 'allArtistTerm', 'allTrackTerm', ''] // 包含默认搜索
+      
+      const searchPromises = []
+      searchTerms.forEach(term => {
+        countries.forEach(country => {
+          searchAttributes.forEach(attr => {
+            const attrParam = attr ? `&attribute=${attr}` : ''
+            // 增加 limit 到 200，确保能搜到更多结果
+            searchPromises.push(
+              fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=200&country=${country}${attrParam}`)
+                .then(res => res.json())
+                .catch(() => ({ results: [] }))
+            )
+          })
+        })
+      })
+      
+      const results = await Promise.all(searchPromises)
+      let allResults = results.flatMap(data => data.results || [])
+
+      // 预过滤：如果结果太多，优先保留主流艺术家的结果
+      // 使用更激进的过滤：只要评分超过80就认为是主流
+      const mainstreamResults = allResults.filter(track => {
+        const ranked = rankAlbumCovers([track], songName)
+        return ranked.length > 0 && ranked[0].score > 80
+      })
+      
+      if (mainstreamResults.length > 0) {
+        // 如果找到了主流艺术家，优先展示这些，并去重
+        const mainstreamMap = new Map()
+        mainstreamResults.forEach(track => {
+          if (!mainstreamMap.has(track.trackId)) {
+            mainstreamMap.set(track.trackId, track)
+          }
+        })
+        const otherResults = allResults.filter(track => !mainstreamMap.has(track.trackId))
+        allResults = [...Array.from(mainstreamMap.values()), ...otherResults]
+      }
+      
+      // 去重（基于 trackId）
+      const uniqueResults = Array.from(
+        new Map(allResults.map(track => [track.trackId, track])).values()
+      )
+
+      if (uniqueResults.length > 0) {
+        // 使用智能排序算法
+        const ranked = rankAlbumCovers(uniqueResults, songName)
+        
+        // 开发模式：打印搜索结果和排序信息
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`\n🔍 搜索 "${songName}" 的结果：`)
+          console.log(`   总结果数: ${uniqueResults.length}`)
+          console.log(`   排序后 Top 10:`)
+          ranked.slice(0, 10).forEach((track, index) => {
+            const matchInfo = track.trackName === songName ? '✅ 完全匹配' : 
+                            track.trackName.includes(songName) ? '⚠️ 部分匹配' : '❌ 不匹配'
+            console.log(`   ${index + 1}. ${track.trackName} - ${track.artistName} (${matchInfo}, 评分: ${track.score})`)
+          })
+        }
+        
+        // 显示前5个候选封面让用户选择
+        const topCandidates = ranked.slice(0, 5).filter(t => t.artworkUrl100)
+        
+        if (topCandidates.length > 1) {
+          // 多个候选，显示选择器
+          setCoverCandidates(topCandidates)
+        } else if (topCandidates.length === 1) {
+          // 只有一个结果，直接使用
+          const track = topCandidates[0]
+          setSongData({
+            songName: track.trackName,
+            artistName: track.artistName,
+            albumCover: track.artworkUrl100?.replace('100x100', '1000x1000') || track.artworkUrl100,
+            collectionName: track.collectionName
+          })
+        } else {
+          // 没有有效结果
+          const fallbackTrack = uniqueResults.find(t => t.artworkUrl100) || uniqueResults[0]
+          if (fallbackTrack) {
+            setSongData({
+              songName: fallbackTrack.trackName,
+              artistName: fallbackTrack.artistName,
+              albumCover: fallbackTrack.artworkUrl100?.replace('100x100', '1000x1000') || fallbackTrack.artworkUrl100,
+              collectionName: fallbackTrack.collectionName
+            })
+          } else {
+            alert('未找到结果，请尝试其他歌曲。')
+            setShowInput(true)
+          }
+        }
       } else {
         alert('未找到结果，请尝试其他歌曲。')
         setShowInput(true)
@@ -59,6 +160,21 @@ function App() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleCoverSelect = (track) => {
+    setSongData({
+      songName: track.trackName,
+      artistName: track.artistName,
+      albumCover: track.artworkUrl100?.replace('100x100', '1000x1000') || track.artworkUrl100,
+      collectionName: track.collectionName
+    })
+    setCoverCandidates(null)
+  }
+
+  const handleCancelSelection = () => {
+    setCoverCandidates(null)
+    setShowInput(true)
   }
 
   const handleReset = () => {
@@ -142,6 +258,15 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 封面选择器 */}
+      {coverCandidates && (
+        <AlbumCoverSelector
+          candidates={coverCandidates}
+          onSelect={handleCoverSelect}
+          onCancel={handleCancelSelection}
+        />
+      )}
     </div>
   )
 }

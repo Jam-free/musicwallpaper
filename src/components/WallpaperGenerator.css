@@ -81,10 +81,10 @@
 /* 模糊层共同样式 */
 .blur-layer {
   position: absolute;
-  top: -5%; /* 稍微溢出以消除边缘虚化 */
-  left: -5%;
-  width: 110%;
-  height: 110%;
+  top: -10%; /* 进一步增加溢出，彻底消除边缘模糊变淡的问题 */
+  left: -10%;
+  width: 120%;
+  height: 120%;
 }
 
 /* Layer 1：强模糊 (150px) - 死守中轴线，彻底抹平两侧细节 */
@@ -116,6 +116,27 @@
   gap: 16px;
   flex-wrap: wrap;
   justify-content: center;
+  margin-top: 24px;
+}
+
+@media (max-width: 768px) {
+  .wallpaper {
+    width: 220px;
+    height: 489px; /* 保持 9:16，但缩小以适配手机屏幕高度 */
+  }
+  
+  .wallpaper-controls {
+    flex-direction: column; /* 手机端改为垂直排列 */
+    gap: 12px;
+    width: 220px;
+    margin: 24px auto 0;
+  }
+  
+  .control-button {
+    width: 100%;
+    text-align: center;
+    min-width: unset;
+  }
 }
 
 .control-button {
