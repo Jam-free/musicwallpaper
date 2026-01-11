@@ -377,8 +377,9 @@ const getPopularityScore = (track) => {
 export const rankAlbumCovers = (results, searchTerm) => {
   if (!results || results.length === 0) return []
   
-  // 过滤掉没有封面的结果
-  const validResults = results.filter(track => track.artworkUrl100)
+  // 优先使用有封面的结果，但如果没有封面也保留（避免完全无结果）
+  const resultsWithCover = results.filter(track => track.artworkUrl100)
+  const validResults = resultsWithCover.length > 0 ? resultsWithCover : results
   
   if (validResults.length === 0) return []
   

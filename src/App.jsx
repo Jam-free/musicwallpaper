@@ -77,13 +77,40 @@ function App() {
       })
       
       const results = await Promise.all(searchPromises)
-      let allResults = results.flatMap(data => data.results || [])
+      let allResults = results.flatMap(data => {
+        if (!data || !data.results) {
+          console.warn('API 返回数据格式异常:', data)
+          return []
+        }
+        return data.results
+      })
+
+      // 开发模式：打印原始搜索结果
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`\n📊 原始搜索结果统计:`)
+        console.log(`   搜索词数量: ${searchTerms.size}`)
+        console.log(`   API 请求数: ${searchPromises.length}`)
+        console.log(`   原始结果数: ${allResults.length}`)
+      }
+
+      if (allResults.length === 0) {
+        console.error('❌ 所有 API 请求都未返回结果')
+        alert('未找到结果，请尝试其他歌曲。')
+        setShowInput(true)
+        setIsLoading(false)
+        return
+      }
 
       // 预过滤：如果结果太多，优先保留主流艺术家的结果
       // 使用更激进的过滤：只要评分超过80就认为是主流
       const mainstreamResults = allResults.filter(track => {
-        const ranked = rankAlbumCovers([track], songName)
-        return ranked.length > 0 && ranked[0].score > 80
+        try {
+          const ranked = rankAlbumCovers([track], songName)
+          return ranked.length > 0 && ranked[0].score > 80
+        } catch (error) {
+          console.error('排序函数出错:', error, track)
+          return false
+        }
       })
       
       if (mainstreamResults.length > 0) {
@@ -107,18 +134,6 @@ function App() {
         // 使用智能排序算法
         const ranked = rankAlbumCovers(uniqueResults, songName)
         
-        // 开发模式：打印搜索结果和排序信息
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`\n🔍 搜索 "${songName}" 的结果：`)
-          console.log(`   总结果数: ${uniqueResults.length}`)
-          console.log(`   排序后 Top 10:`)
-          ranked.slice(0, 10).forEach((track, index) => {
-            const matchInfo = track.trackName === songName ? '✅ 完全匹配' : 
-                            track.trackName.includes(songName) ? '⚠️ 部分匹配' : '❌ 不匹配'
-            console.log(`   ${index + 1}. ${track.trackName} - ${track.artistName} (${matchInfo}, 评分: ${track.score})`)
-          })
-        }
-        
         // 显示前5个候选封面让用户选择
         const topCandidates = ranked.slice(0, 5).filter(t => t.artworkUrl100)
         
@@ -128,26 +143,11 @@ function App() {
         } else if (topCandidates.length === 1) {
           // 只有一个结果，直接使用
           const track = topCandidates[0]
-          setSongData({
-            songName: track.trackName,
-            artistName: track.artistName,
-            albumCover: track.artworkUrl100?.replace('100x100', '1000x1000') || track.artworkUrl100,
-            collectionName: track.collectionName
-          })
+          handleCoverSelect(track)
         } else {
-          // 没有有效结果
+          // 没有有效结果，尝试使用第一个结果
           const fallbackTrack = uniqueResults.find(t => t.artworkUrl100) || uniqueResults[0]
-          if (fallbackTrack) {
-            setSongData({
-              songName: fallbackTrack.trackName,
-              artistName: fallbackTrack.artistName,
-              albumCover: fallbackTrack.artworkUrl100?.replace('100x100', '1000x1000') || fallbackTrack.artworkUrl100,
-              collectionName: fallbackTrack.collectionName
-            })
-          } else {
-            alert('未找到结果，请尝试其他歌曲。')
-            setShowInput(true)
-          }
+          handleCoverSelect(fallbackTrack)
         }
       } else {
         alert('未找到结果，请尝试其他歌曲。')
