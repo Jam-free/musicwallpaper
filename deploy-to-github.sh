@@ -49,3 +49,6 @@ git push -u origin $CURRENT_BRANCH || {
 echo "✅ 部署完成！"
 echo "🌐 访问: https://github.com/Jam-free/musicwallpaper"
 
+
+
+

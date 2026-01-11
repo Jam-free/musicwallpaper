@@ -4,8 +4,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-lg);
-  gap: var(--spacing-xl);
+  padding: 20px;
+  background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 50%, #16213e 100%);
 }
 
 .wallpaper-wrapper {
@@ -13,232 +13,159 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xl);
+  gap: 16px;
   width: 100%;
-  max-width: 600px;
+  max-width: 350px;
   margin: 0 auto;
 }
 
 .wallpaper {
   position: relative;
   width: 240px;
-  height: 534px;
+  height: 533px;
   flex-shrink: 0;
   border-radius: 24px;
   overflow: hidden;
-  box-shadow: 
+  box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
-  background: #0f0f1a;
-  transform: scale(1);
-  transition: transform 0.3s ease;
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+  background: #000;
   margin: 0 auto;
 }
 
-.wallpaper:hover {
-  transform: scale(1.02);
-}
-
-/* Wallpaper base container */
-.wallpaper-mirror-bg {
+/* 基础画面层逻辑：确保背景和模糊层画面完全对齐 */
+.wallpaper-base, .blur-layer-content {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 0;
-  border-radius: 24px;
-  overflow: hidden;
-}
-
-/* Original square album cover - complete display at top */
-.album-cover-original {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  aspect-ratio: 1;
-  z-index: 2;
-  overflow: hidden;
-  border-radius: 24px 24px 0 0;
-}
-
-/* Square cover image - maintains 1:1 aspect ratio, complete display */
-.album-cover-square {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  z-index: 2;
-  border-radius: 24px 24px 0 0;
-}
-
-/* Mirrored extension from cover bottom edge - vertical flip of the same cover */
-.album-cover-mirror {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  /* Mirror the entire cover - same size as cover above, aligned at bottom edge */
-  background-size: 100% auto;
-  background-position: center bottom;
-  background-repeat: no-repeat;
-  transform: scaleY(-1);
+  display: flex;
+  flex-direction: column;
   z-index: 1;
-  border-radius: 0 0 24px 24px;
-  /* Ensure the mirror shows the bottom part of the cover when flipped */
-  background-clip: border-box;
 }
 
-/* Strong Gaussian blur overlay on mirrored region only */
-.album-cover-blur-overlay {
-  position: absolute;
-  left: 0;
+.album-section {
   width: 100%;
-  /* Same source as mirror - the album cover itself */
-  background-size: 100% auto;
-  background-position: center bottom;
-  background-repeat: no-repeat;
+  height: 50%;
+  position: relative;
+  overflow: hidden;
+}
+
+.album-image-normal {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.album-image-mirror {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
   transform: scaleY(-1);
-  /* Strong blur (60px) + reduced brightness + reduced saturation + reduced contrast */
-  filter: blur(60px) brightness(0.65) saturate(0.6) contrast(0.75);
-  z-index: 3;
-  pointer-events: none;
-  border-radius: 0 0 24px 24px;
-  /* Vertical gradient mask for seamless transition from cover bottom edge */
-  mask-image: linear-gradient(
-    to bottom,
-    rgba(0,0,0,0) 0%,
-    rgba(0,0,0,0.05) 5%,
-    rgba(0,0,0,0.15) 15%,
-    rgba(0,0,0,0.35) 30%,
-    rgba(0,0,0,0.6) 50%,
-    rgba(0,0,0,0.8) 70%,
-    rgba(0,0,0,0.95) 90%,
-    rgba(0,0,0,1) 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    rgba(0,0,0,0) 0%,
-    rgba(0,0,0,0.05) 5%,
-    rgba(0,0,0,0.15) 15%,
-    rgba(0,0,0,0.35) 30%,
-    rgba(0,0,0,0.6) 50%,
-    rgba(0,0,0,0.8) 70%,
-    rgba(0,0,0,0.95) 90%,
-    rgba(0,0,0,1) 100%
-  );
-  background-clip: border-box;
 }
 
-/* Additional smooth transition gradient at cover bottom junction */
-.center-line-blend {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  z-index: 4;
-  pointer-events: none;
-  border-radius: 24px;
-  background: linear-gradient(
-    to bottom,
-    rgba(0,0,0,0) 0%,
-    rgba(0,0,0,0.05) 30%,
-    rgba(0,0,0,0.15) 60%,
-    rgba(0,0,0,0.3) 100%
-  );
-}
-
-/* Subtle texture overlay */
-.texture-overlay {
+/* 模糊层容器 */
+.wallpaper-blur-overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  border-radius: 24px;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+  z-index: 2;
   pointer-events: none;
-  z-index: 4;
-  mix-blend-mode: overlay;
-  opacity: 0.5;
+}
+
+/* 模糊层共同样式 */
+.blur-layer {
+  position: absolute;
+  top: -5%; /* 稍微溢出以消除边缘虚化 */
+  left: -5%;
+  width: 110%;
+  height: 110%;
+}
+
+/* Layer 1：强模糊 (150px) - 死守中轴线，彻底抹平两侧细节 */
+.blur-layer-1 {
+  filter: blur(150px) brightness(1.05) saturate(1.15) contrast(0.9);
+  /* 52%前保持全黑（确保两侧模糊），58%即切断，释放领带 */
+  mask-image: linear-gradient(to top, black 0%, black 52%, transparent 58%);
+  -webkit-mask-image: linear-gradient(to top, black 0%, black 52%, transparent 58%);
+}
+
+/* Layer 2：中模糊 (80px) - 营造奶油散景，加速撤离 */
+.blur-layer-2 {
+  filter: blur(80px) brightness(1.15) saturate(1.25) contrast(0.92);
+  /* 52%前保持全黑，60%即切断 */
+  mask-image: linear-gradient(to top, black 0%, black 52%, transparent 60%);
+  -webkit-mask-image: linear-gradient(to top, black 0%, black 52%, transparent 60%);
+}
+
+/* Layer 3：弱模糊 (30px) - 最后的空气光晕，极致清爽 */
+.blur-layer-3 {
+  filter: blur(30px) brightness(1.25) saturate(1.35) contrast(0.95);
+  /* 52%前保持全黑，65%即彻底消失 */
+  mask-image: linear-gradient(to top, black 0%, black 52%, transparent 65%);
+  -webkit-mask-image: linear-gradient(to top, black 0%, black 52%, transparent 65%);
 }
 
 .wallpaper-controls {
   display: flex;
-  flex-direction: row;
-  gap: var(--spacing-md);
-  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
   justify-content: center;
-  width: 100%;
-  flex-shrink: 0;
 }
 
 .control-button {
-  padding: 16px 32px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-radius: var(--radius-md);
-  background: rgba(30, 30, 40, 0.85);
-  color: #ffffff;
-  font-size: 16px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.01em;
   cursor: pointer;
-  transition: all var(--transition-medium);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  min-width: 160px;
-  text-align: center;
-}
-
-.control-button:hover:not(:disabled) {
-  background: rgba(40, 40, 50, 0.9);
-  border-color: rgba(255, 255, 255, 0.6);
-  transform: translateY(-2px);
-  box-shadow: 
-    0 12px 40px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-}
-
-.control-button:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.control-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: rgba(20, 20, 30, 0.7);
-  border-color: rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+  min-width: 100px;
 }
 
 .control-button.primary {
-  background: linear-gradient(135deg, rgba(244, 114, 182, 0.75), rgba(167, 139, 250, 0.75));
-  border-color: rgba(244, 114, 182, 0.6);
-  box-shadow: 
-    0 8px 32px rgba(244, 114, 182, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
 }
 
 .control-button.primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(244, 114, 182, 0.85), rgba(167, 139, 250, 0.85));
-  border-color: rgba(244, 114, 182, 0.8);
-  box-shadow: 
-    0 12px 40px rgba(244, 114, 182, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: 0 6px 24px rgba(139, 92, 246, 0.4);
+  transform: translateY(-2px);
+}
+
+.control-button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .control-button.secondary {
-  background: rgba(40, 40, 50, 0.85);
-  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
 }
 
-@media (max-width: 1024px) {
+.control-button.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 768px) {
   .wallpaper-container {
-    padding: var(--spacing-md);
+    padding: 16px;
+  }
+
+  .wallpaper {
+    width: 200px;
+    height: 444px;
+    border-radius: 20px;
   }
 
   .wallpaper-wrapper {
@@ -246,57 +173,12 @@
   }
 
   .wallpaper-controls {
-    flex-direction: row;
-    gap: var(--spacing-sm);
-  }
-
-  .control-button {
-    flex: 1;
-    min-width: 140px;
-    padding: 14px 24px;
-  }
-}
-
-@media (max-width: 768px) {
-  .wallpaper-container {
-    padding: var(--spacing-sm);
-  }
-
-  .wallpaper {
-    width: 220px;
-    height: 490px;
-    border-radius: 20px;
-  }
-
-  .wallpaper-blur-bg {
-    border-radius: 20px;
-  }
-
-  .album-cover-container {
-    border-radius: 20px 20px 0 0;
-  }
-
-  .album-cover-square {
-    border-radius: 20px;
-  }
-
-  .gradient-overlay,
-  .vignette-overlay,
-  .texture-overlay {
-    border-radius: 20px;
-  }
-
-  .wallpaper-controls {
     flex-direction: column;
     width: 100%;
-    max-width: 240px;
   }
 
   .control-button {
     width: 100%;
-    min-width: auto;
-    padding: 14px 24px;
-    font-size: 14px;
+    max-width: 200px;
   }
 }
-

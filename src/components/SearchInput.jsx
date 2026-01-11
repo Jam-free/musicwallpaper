@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import './SearchInput.css'
 
@@ -65,6 +65,9 @@ function SearchInput({ onSearch, isLoading }) {
 }
 
 export default SearchInput
+
+
+
 
 
 

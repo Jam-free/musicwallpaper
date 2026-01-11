@@ -274,3 +274,6 @@ const gradient = `linear-gradient(180deg,
 当前实现已经包含了这些核心技术，可以通过调整参数和添加细节来进一步接近参考效果。
 
 
+
+
+

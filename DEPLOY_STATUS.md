@@ -86,3 +86,6 @@ bash quick-deploy.sh
 3. 是否有 GitHub 访问权限
 4. 网络连接是否正常
 
+
+
+
