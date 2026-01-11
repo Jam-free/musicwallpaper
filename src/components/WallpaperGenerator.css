@@ -148,6 +148,8 @@
   cursor: pointer;
   transition: all 0.3s ease;
   min-width: 100px;
+  display: block; /* 显式块级显示 */
+  margin: 0; /* 默认 margin 重置 */
 }
 
 .control-button.primary {
@@ -187,19 +189,30 @@
     width: 200px;
     height: 444px;
     border-radius: 20px;
+    margin: 0 auto; /* 确保图片居中 */
   }
 
   .wallpaper-wrapper {
-    max-width: 100%;
+    width: 100%;
+    max-width: 280px; /* 进一步限制宽度，保持整体紧凑 */
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* 关键：强制所有子元素在纵轴居中 */
   }
 
   .wallpaper-controls {
     flex-direction: column;
     width: 100%;
+    align-items: center; /* 关键：确保垂直排列的按钮也居中 */
+    margin: 24px 0 0 0;
+    gap: 12px;
   }
 
   .control-button {
     width: 100%;
-    max-width: 200px;
+    max-width: 200px; /* 按钮宽度与预览图一致，视觉更整齐 */
+    text-align: center;
+    margin: 0 auto;
   }
 }
