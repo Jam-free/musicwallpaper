@@ -1,10 +1,14 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import SearchInput from './components/SearchInput'
 import WallpaperGenerator from './components/WallpaperGenerator'
 import AlbumCoverSelector from './components/AlbumCoverSelector'
-import { getBestAlbumCover, rankAlbumCovers, getRecommendedArtist, getSongTranslations } from './utils/albumRanker'
+import { rankAlbumCovers, getRecommendedArtist, getSongTranslations, quickScoreTrack } from './utils/albumRanker'
 import './App.css'
+
+// 搜索结果缓存（避免重复请求相同关键词）
+const searchCache = new Map()
+const CACHE_EXPIRY = 5 * 60 * 1000 // 5分钟缓存过期
 
 function App() {
   const [songData, setSongData] = useState(null)
@@ -12,155 +16,163 @@ function App() {
   const [showInput, setShowInput] = useState(true)
   const [coverCandidates, setCoverCandidates] = useState(null)
 
-  const handleSearch = async (songName) => {
-    if (!songName.trim()) return
+  // 优化：使用 useCallback 避免不必要的函数重建
+  const handleSearch = useCallback(async (songName) => {
+    // 输入验证和安全限制
+    const trimmedName = songName.trim()
+    if (!trimmedName) return
+    
+    // 安全限制：最大搜索词长度 100 字符
+    if (trimmedName.length > 100) {
+      alert('搜索词过长，请缩短后重试。')
+      return
+    }
 
     setIsLoading(true)
     setShowInput(false)
     setCoverCandidates(null)
 
     try {
-      // 优化搜索策略：尝试多种搜索方式和地区，提高命中率
-      const searchTerms = new Set()
-      const normalizedSongName = songName.trim().toLowerCase()
-      
-      // 1. 原始搜索词
-      searchTerms.add(songName.trim())
-      
-      // 2. 如果搜索的是中文，也添加英文翻译进行搜索
-      const isChineseSearch = /[\u4e00-\u9fa5]/.test(songName)
-      if (isChineseSearch) {
-        const translations = getSongTranslations(songName)
-        translations.forEach(translation => {
-          searchTerms.add(translation)
-          // 也尝试搜索 "艺术家 + 英文翻译"
-          const matchedArtist = getRecommendedArtist(songName)
-          if (matchedArtist) {
-            searchTerms.add(`${matchedArtist} ${translation}`)
-            searchTerms.add(`${translation} ${matchedArtist}`)
-          }
-        })
-      }
-      
-      // 3. 检查是否有硬编码的艺术家匹配规则
-      const matchedArtist = getRecommendedArtist(songName)
-      
-      if (matchedArtist) {
-        // 如果找到匹配规则，直接搜索 "艺术家名 + 歌曲名"
-        searchTerms.add(`${matchedArtist} ${songName.trim()}`)
-        searchTerms.add(`${songName.trim()} ${matchedArtist}`)
-      }
-      
-      // 4. 只搜索第一个词（对于"Peaches"这种单字歌曲）
-      const firstWord = songName.trim().split(/\s+/)[0]
-      if (firstWord && firstWord !== songName.trim()) {
-        searchTerms.add(firstWord)
-      }
-      
-      // 4. 增加地区支持，特别是香港区 (hk) 对华语歌曲支持极好
-      const countries = ['us', 'hk', 'tw'] // 增加台湾区
-      const searchAttributes = ['songTerm', 'allArtistTerm', 'allTrackTerm', ''] // 包含默认搜索
-      
-      const searchPromises = []
-      searchTerms.forEach(term => {
-        countries.forEach(country => {
-          searchAttributes.forEach(attr => {
-            const attrParam = attr ? `&attribute=${attr}` : ''
-            // 增加 limit 到 200，确保能搜到更多结果
-            searchPromises.push(
-              fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=200&country=${country}${attrParam}`)
-                .then(res => res.json())
-                .catch(() => ({ results: [] }))
-            )
-          })
-        })
-      })
-      
-      const results = await Promise.all(searchPromises)
-      let allResults = results.flatMap(data => {
-        if (!data || !data.results) {
-          console.warn('API 返回数据格式异常:', data)
-          return []
-        }
-        return data.results
-      })
-
-      // 开发模式：打印原始搜索结果
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`\n📊 原始搜索结果统计:`)
-        console.log(`   搜索词数量: ${searchTerms.size}`)
-        console.log(`   API 请求数: ${searchPromises.length}`)
-        console.log(`   原始结果数: ${allResults.length}`)
-      }
-
-      if (allResults.length === 0) {
-        console.error('❌ 所有 API 请求都未返回结果')
-        alert('未找到结果，请尝试其他歌曲。')
-        setShowInput(true)
+      // 检查缓存
+      const cacheKey = trimmedName.toLowerCase()
+      const cached = searchCache.get(cacheKey)
+      if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
+        processSearchResults(cached.results, trimmedName)
         setIsLoading(false)
         return
       }
 
-      // 预过滤：如果结果太多，优先保留主流艺术家的结果
-      // 使用更激进的过滤：只要评分超过80就认为是主流
-      const mainstreamResults = allResults.filter(track => {
-        try {
-          const ranked = rankAlbumCovers([track], songName)
-          return ranked.length > 0 && ranked[0].score > 80
-        } catch (error) {
-          console.error('排序函数出错:', error, track)
-          return false
-        }
+      // ============ 优化后的搜索策略 ============
+      // 核心优化：从 72+ 个请求减少到最多 6 个请求
+      const isChineseSearch = /[\u4e00-\u9fa5]/.test(trimmedName)
+      const matchedArtist = getRecommendedArtist(trimmedName)
+      
+      // 构建智能搜索词（最多 2 个）
+      const searchTerms = [trimmedName]
+      if (matchedArtist) {
+        searchTerms.push(`${matchedArtist} ${trimmedName}`)
+      }
+      
+      // 选择最优地区（中文用 hk，其他用 us）
+      const primaryCountry = isChineseSearch ? 'hk' : 'us'
+      const secondaryCountry = isChineseSearch ? 'us' : 'hk'
+      
+      // 限制并发请求数量：最多 4 个请求
+      const searchPromises = []
+      
+      // 主要搜索（2个请求）
+      searchTerms.forEach(term => {
+        searchPromises.push(
+          fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=50&country=${primaryCountry}`)
+            .then(res => res.ok ? res.json() : { results: [] })
+            .catch(() => ({ results: [] }))
+        )
       })
       
-      if (mainstreamResults.length > 0) {
-        // 如果找到了主流艺术家，优先展示这些，并去重
-        const mainstreamMap = new Map()
-        mainstreamResults.forEach(track => {
-          if (!mainstreamMap.has(track.trackId)) {
-            mainstreamMap.set(track.trackId, track)
-          }
-        })
-        const otherResults = allResults.filter(track => !mainstreamMap.has(track.trackId))
-        allResults = [...Array.from(mainstreamMap.values()), ...otherResults]
-      }
-      
-      // 去重（基于 trackId）
-      const uniqueResults = Array.from(
-        new Map(allResults.map(track => [track.trackId, track])).values()
+      // 备用搜索（2个请求，仅使用原始搜索词）
+      searchPromises.push(
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(trimmedName)}&media=music&entity=song&limit=50&country=${secondaryCountry}`)
+          .then(res => res.ok ? res.json() : { results: [] })
+          .catch(() => ({ results: [] }))
       )
-
-      if (uniqueResults.length > 0) {
-        // 使用智能排序算法
-        const ranked = rankAlbumCovers(uniqueResults, songName)
-        
-        // 显示前5个候选封面让用户选择
-        const topCandidates = ranked.slice(0, 5).filter(t => t.artworkUrl100)
-        
-        if (topCandidates.length > 1) {
-          // 多个候选，显示选择器
-          setCoverCandidates(topCandidates)
-        } else if (topCandidates.length === 1) {
-          // 只有一个结果，直接使用
-          const track = topCandidates[0]
-          handleCoverSelect(track)
-        } else {
-          // 没有有效结果，尝试使用第一个结果
-          const fallbackTrack = uniqueResults.find(t => t.artworkUrl100) || uniqueResults[0]
-          handleCoverSelect(fallbackTrack)
+      
+      // 如果是中文搜索，额外添加英文翻译搜索
+      if (isChineseSearch) {
+        const translations = getSongTranslations(trimmedName)
+        if (translations.length > 0) {
+          const englishTerm = matchedArtist 
+            ? `${matchedArtist} ${translations[0]}` 
+            : translations[0]
+          searchPromises.push(
+            fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(englishTerm)}&media=music&entity=song&limit=30&country=us`)
+              .then(res => res.ok ? res.json() : { results: [] })
+              .catch(() => ({ results: [] }))
+          )
         }
-      } else {
-        alert('未找到结果，请尝试其他歌曲。')
-        setShowInput(true)
       }
+
+      // 并行执行所有请求
+      const results = await Promise.all(searchPromises)
+      
+      // 合并并去重结果
+      const allResults = []
+      const seenIds = new Set()
+      
+      results.forEach(data => {
+        if (data?.results) {
+          data.results.forEach(track => {
+            if (track.trackId && !seenIds.has(track.trackId)) {
+              seenIds.add(track.trackId)
+              allResults.push(track)
+            }
+          })
+        }
+      })
+
+      // 开发模式日志（简化）
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔍 搜索完成: ${searchPromises.length} 请求, ${allResults.length} 结果`)
+      }
+
+      // 缓存结果
+      searchCache.set(cacheKey, { results: allResults, timestamp: Date.now() })
+      
+      // 处理结果
+      processSearchResults(allResults, trimmedName)
+      
     } catch (error) {
-      console.error('Error fetching song:', error)
+      console.error('搜索失败:', error)
       alert('获取歌曲失败，请重试。')
       setShowInput(true)
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
+
+  // 优化：抽取结果处理逻辑，提高可读性和可维护性
+  const processSearchResults = useCallback((allResults, songName) => {
+    if (allResults.length === 0) {
+      alert('未找到结果，请尝试其他歌曲。')
+      setShowInput(true)
+      return
+    }
+
+    // ============ 优化后的预过滤算法 ============
+    // 使用快速评分函数替代完整排序，从 O(n²) 降为 O(n)
+    const scoredResults = allResults
+      .filter(track => track.artworkUrl100) // 必须有封面
+      .map(track => ({
+        track,
+        quickScore: quickScoreTrack(track, songName)
+      }))
+    
+    // 快速筛选高质量结果（评分 > 50）
+    const highQualityResults = scoredResults
+      .filter(item => item.quickScore > 50)
+      .map(item => item.track)
+    
+    // 如果没有高质量结果，使用所有有封面的结果
+    const candidatePool = highQualityResults.length > 0 
+      ? highQualityResults 
+      : scoredResults.map(item => item.track)
+
+    // 使用完整排序算法对候选池排序（数量已大幅减少）
+    const ranked = rankAlbumCovers(candidatePool, songName)
+    const topCandidates = ranked.slice(0, 5)
+    
+    if (topCandidates.length > 1) {
+      setCoverCandidates(topCandidates)
+    } else if (topCandidates.length === 1) {
+      handleCoverSelect(topCandidates[0])
+    } else if (allResults.length > 0) {
+      // 回退：使用第一个有封面的结果
+      const fallback = allResults.find(t => t.artworkUrl100) || allResults[0]
+      handleCoverSelect(fallback)
+    } else {
+      alert('未找到结果，请尝试其他歌曲。')
+      setShowInput(true)
+    }
+  }, [])
 
   const handleCoverSelect = (track) => {
     setSongData({

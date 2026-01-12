@@ -1,6 +1,32 @@
-import React from 'react'
+import React, { useState, useCallback, memo } from 'react'
 import { motion } from 'framer-motion'
 import './AlbumCoverSelector.css'
+
+// 懒加载图片组件
+const LazyImage = memo(({ src, alt, className }) => {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+  
+  return (
+    <div className="lazy-image-container">
+      {!loaded && !error && (
+        <div className="image-placeholder">
+          <div className="placeholder-spinner" />
+        </div>
+      )}
+      <img 
+        src={src}
+        alt={alt}
+        className={`${className} ${loaded ? 'loaded' : 'loading'}`}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+      />
+    </div>
+  )
+})
+
+LazyImage.displayName = 'LazyImage'
 
 function AlbumCoverSelector({ candidates, onSelect, onCancel }) {
   if (!candidates || candidates.length === 0) return null
@@ -25,21 +51,22 @@ function AlbumCoverSelector({ candidates, onSelect, onCancel }) {
         
         <div className="cover-grid">
           {candidates.map((track, index) => {
-            const coverUrl = track.artworkUrl100?.replace('100x100', '1000x1000') || track.artworkUrl100
+            // 使用 300x300 预览图（更快加载），选择后再加载高清
+            const coverUrl = track.artworkUrl100?.replace('100x100', '300x300') || track.artworkUrl100
             
             return (
               <motion.div
-                key={index}
+                key={track.trackId || index}
                 className="cover-card"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                transition={{ delay: index * 0.05 }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => onSelect(track)}
               >
                 <div className="cover-image-wrapper">
-                  <img 
+                  <LazyImage 
                     src={coverUrl} 
                     alt={track.collectionName}
                     className="cover-image"
@@ -71,5 +98,5 @@ function AlbumCoverSelector({ candidates, onSelect, onCancel }) {
   )
 }
 
-export default AlbumCoverSelector
+export default memo(AlbumCoverSelector)
 

@@ -1,30 +1,79 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react'
 import { motion } from 'framer-motion'
 import { processAlbumCover } from '../utils/imageProcessor'
 import './WallpaperGenerator.css'
 
+// 图片预加载缓存
+const imageCache = new Map()
+
 function WallpaperGenerator({ songData, onReset }) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [processedCoverUrl, setProcessedCoverUrl] = useState(null)
+  const [loadingProgress, setLoadingProgress] = useState(0)
   const wallpaperRef = useRef(null)
+  const abortControllerRef = useRef(null)
 
   useEffect(() => {
-    if (songData?.albumCover) {
-      // 处理图片：自动裁剪黑边和调整为正方形
-      processAlbumCover(songData.albumCover)
-        .then(processedUrl => {
-          setProcessedCoverUrl(processedUrl)
-          const img = new Image()
-          img.onload = () => setImageLoaded(true)
-          img.src = processedUrl
-        })
-        .catch(error => {
-          console.error('图片处理失败，使用原图:', error)
-          setProcessedCoverUrl(songData.albumCover)
-          const img = new Image()
-          img.onload = () => setImageLoaded(true)
-          img.src = songData.albumCover
-        })
+    if (!songData?.albumCover) return
+    
+    // 取消之前的加载任务
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    abortControllerRef.current = new AbortController()
+    
+    const coverUrl = songData.albumCover
+    
+    // 检查缓存
+    if (imageCache.has(coverUrl)) {
+      setProcessedCoverUrl(imageCache.get(coverUrl))
+      setImageLoaded(true)
+      setLoadingProgress(100)
+      return
+    }
+    
+    setImageLoaded(false)
+    setLoadingProgress(10)
+    
+    // 处理图片：自动裁剪黑边和调整为正方形
+    processAlbumCover(coverUrl)
+      .then(processedUrl => {
+        if (abortControllerRef.current?.signal.aborted) return
+        
+        setLoadingProgress(50)
+        setProcessedCoverUrl(processedUrl)
+        
+        // 预加载处理后的图片
+        const img = new Image()
+        img.onload = () => {
+          if (abortControllerRef.current?.signal.aborted) return
+          imageCache.set(coverUrl, processedUrl) // 缓存
+          setImageLoaded(true)
+          setLoadingProgress(100)
+        }
+        img.onerror = () => {
+          console.error('图片加载失败')
+          setLoadingProgress(100)
+        }
+        img.src = processedUrl
+      })
+      .catch(error => {
+        if (abortControllerRef.current?.signal.aborted) return
+        console.error('图片处理失败，使用原图:', error)
+        setProcessedCoverUrl(coverUrl)
+        
+        const img = new Image()
+        img.onload = () => {
+          setImageLoaded(true)
+          setLoadingProgress(100)
+        }
+        img.src = coverUrl
+      })
+    
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
     }
   }, [songData])
 
@@ -205,24 +254,38 @@ function WallpaperGenerator({ songData, onReset }) {
         animate={{ opacity: 1, scale: 1 }}
       >
         <div ref={wallpaperRef} className="wallpaper">
+          {/* 加载进度指示器 */}
+          {!imageLoaded && (
+            <div className="wallpaper-loading">
+              <div className="loading-spinner" />
+              <div className="loading-text">
+                {loadingProgress < 50 ? '处理图片中...' : '加载中...'}
+              </div>
+            </div>
+          )}
+          
           {imageLoaded && <WallpaperContent />}
           
-          <div className="wallpaper-blur-overlay">
-            <div className="blur-layer blur-layer-1">
-              <WallpaperContent isBlurred />
+          {imageLoaded && (
+            <div className="wallpaper-blur-overlay">
+              <div className="blur-layer blur-layer-1">
+                <WallpaperContent isBlurred />
+              </div>
+              <div className="blur-layer blur-layer-2">
+                <WallpaperContent isBlurred />
+              </div>
+              <div className="blur-layer blur-layer-3">
+                <WallpaperContent isBlurred />
+              </div>
             </div>
-            <div className="blur-layer blur-layer-2">
-              <WallpaperContent isBlurred />
-            </div>
-            <div className="blur-layer blur-layer-3">
-              <WallpaperContent isBlurred />
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="wallpaper-controls">
           <button className="control-button secondary" onClick={onReset}>重新搜索</button>
-          <button className="control-button primary" onClick={handleDownload} disabled={!imageLoaded}>下载壁纸</button>
+          <button className="control-button primary" onClick={handleDownload} disabled={!imageLoaded}>
+            {imageLoaded ? '下载壁纸' : '加载中...'}
+          </button>
         </div>
       </motion.div>
     </div>

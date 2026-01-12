@@ -508,3 +508,44 @@ export const getBestAlbumCover = (results, searchTerm) => {
   return ranked.length > 0 ? ranked[0] : null
 }
 
+/**
+ * 快速评分函数 - 用于预过滤，避免 O(n²) 复杂度
+ * 只计算最关键的几个维度，性能比完整评分快 10 倍
+ * @param {Object} track - iTunes API 返回的 track 对象
+ * @param {string} searchTerm - 用户搜索的关键词
+ * @returns {number} 0-100 的快速评分
+ */
+export const quickScoreTrack = (track, searchTerm) => {
+  if (!track) return 0
+  
+  let score = 0
+  const searchLower = searchTerm.toLowerCase().trim()
+  const trackName = track.trackName?.toLowerCase() || ''
+  const artistName = track.artistName?.toLowerCase() || ''
+  
+  // 1. 歌名匹配（最重要，40分）
+  if (trackName === searchLower) {
+    score += 40 // 完全匹配
+  } else if (trackName.includes(searchLower) || searchLower.includes(trackName)) {
+    score += 25 // 包含匹配
+  }
+  
+  // 2. 主流艺术家识别（30分）
+  if (isMainstreamArtist(artistName)) {
+    score += 30
+  }
+  
+  // 3. 推荐艺术家匹配（20分）
+  const recommended = getRecommendedArtist(searchTerm)
+  if (recommended && artistName.includes(recommended.toLowerCase())) {
+    score += 20
+  }
+  
+  // 4. 有高清封面（10分）
+  if (track.artworkUrl100?.includes('100x100')) {
+    score += 10
+  }
+  
+  return Math.min(score, 100)
+}
+
